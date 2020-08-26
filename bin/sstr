@@ -1,34 +1,96 @@
 #!/usr/bin/env node
 
-const fs = require('fs')
+const commander = require('commander')
+const sstr = require('../lib/super-simple-test-runner')
+const reporters = sstr.reporters
+const interfaces = sstr.interfaces
+const Suite = sstr.Suite
+const Runner = sstr.Runner
 const vm = require('vm')
+const fs = require('fs')
 const join = require('path').join
-const FILE_PATH = process.argv[2]
 const cwd = process.cwd();
-const Suite = require('../lib/suite')
-const Runner = require('../lib/runner')
-const Reporter = require('../lib/list_reporter')
+
+commander
+  .version(sstr.version)
+  .usage('[options] [files]')
+  .option('-r, --require <name>', 'require the given module')
+  .option('-R, --reporter <name>', 'specify the reporter to use', 'list')
+  .option('-u, --ui <name>', 'specify user-interface (bdd|tdd|exports)', 'bdd')
+  .option('-g, --grep <pattern>', 'only run tests matching <pattern>')
+  .option('-t, --timeout <ms>', 'set test-case timeout in milliseconds [2000]')
+  .option('-s, --slow <ms>', '"slow" test threshold in milliseconds [75]', parseInt)
+	.option('-f', '--foo')
+
+commander.on('--help', function(){
+  console.log('  Reporters:');
+  console.log('');
+  console.log('    list - spec-style listing');
+  console.log('');
+  console.log('  Interfaces:');
+  console.log('');
+  console.log('    bdd - describe() / it()');
+  console.log('');
+});
+
+
+commander.on('require', function(mod){
+  require(mod);
+});
+
+try {
+    let opts = fs.readFileSync('test/mocha.opts', 'utf-8')
+		opts = opts.split(/\s+/).slice(0, -1);
+    commander.argv = process.argv
+      .slice(0, 2)
+      .concat(opts.concat(process.argv.slice(2)));
+} catch (err) {
+    console.log(err)
+}
+
+commander.parse(process.argv);
+
+Error.stackTraceLimit = Infinity;
+
+/**
+ * inteface function -> Suite 
+ */
 
 const suite = new Suite('')
-const inerface = require('../lib/bdd')
-inerface(suite)
+const Base = require('../lib/reporters/base')
+const Reporter = require('../lib/reporters/' + commander.reporter)
+const ui = interfaces[commander.ui](suite)
 
-fs.readFile(FILE_PATH, 'utf8', function(err, str) {
-    if(err) throw err;
+if (commander.slow) {
+    Base.slow = commander.slow;
+}
+if (commander.timeout) {
+    suite.timeout(commander.timeout);
+}
 
-    const context = {require}
-    for(let key in global) {
-        context[key] = global[key]
-    }
-    const fileFullPath = require.resolve(join(cwd, FILE_PATH));
-    suite.emit('file', context, FILE_PATH)
-    vm.runInNewContext(str, context, fileFullPath)
-    suite.emit('file end', context, FILE_PATH)
-    run(suite)
-})
+let files = commander.args;
+
+if (!files.length) {
+	files = fs.readdirSync('test').filter(function(path){
+		return path.match(/\.js$/);
+	}).map(function(path){
+		return join('test', path);
+	});
+}
+
+let pending = files.length;
+files.forEach(function(file){
+  file = join(cwd, file);
+  suite.emit('pre-require', global, file);
+  suite.emit('require', require(file), file);
+  suite.emit('post-require', global, file);
+  --pending || run(suite);
+});
 
 function run(suite) {
-    const runner = new Runner(suite);
-    new Reporter(runner);
-    runner.run();
+  suite.emit('run');
+  var runner = new Runner(suite);
+  var reporter = new Reporter(runner);
+  if (commander.grep) runner.grep(new RegExp(commander.grep));
+  runner.run();
 }
