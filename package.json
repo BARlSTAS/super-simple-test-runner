@@ -4,8 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "./bin/sstr"
+    "test": "./bin/sstr --require should"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "commander": "0.3.2"
+  },
+  "devDependencies": {
+    "should": "^13.2.3"
+  }
 }
