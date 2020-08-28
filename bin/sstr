@@ -82,7 +82,7 @@ let pending = files.length;
 files.forEach(function(file){
   file = join(cwd, file);
   suite.emit('pre-require', global, file);
-  suite.emit('require', require(file), file);
+  require(file)
   suite.emit('post-require', global, file);
   --pending || run(suite);
 });
